@@ -1,19 +1,9 @@
-"""
-Harness Layer 4: Bàn giao cho con người (Human Handoff & Escalation).
-Slide 48:
-- Trạng thái: đã làm tới đâu, hành động nào đã có tác dụng phụ.
-- Những gì đã thử: hướng nào đã hỏng và vì sao.
-- Câu hỏi cụ thể: 'Bàn giao tốt là bàn giao mà người nhận trả lời được trong 30 giây.'
-"""
-
 import uuid
 from typing import List, Dict, Any, Optional
 from flight_booking.models import HandoffTicket, FlightCriteria
 
 
 class HandoffManager:
-    """Tạo phiếu bàn giao chuẩn hóa khi Agent gặp bế tắc, lặp, hết ngân sách hoặc cần phê duyệt."""
-
     @staticmethod
     def create_ticket(
         status: str,
@@ -23,7 +13,6 @@ class HandoffManager:
         failed_attempts: List[str],
         question_for_human: str
     ) -> HandoffTicket:
-        """Tạo phiếu bàn giao đạt chuẩn 30 giây."""
         ticket_id = f"TICKET-{uuid.uuid4().hex[:6].upper()}"
         return HandoffTicket(
             ticket_id=ticket_id,
@@ -43,7 +32,6 @@ class HandoffManager:
         reason: str,
         context: Dict[str, Any]
     ) -> HandoffTicket:
-        """Tạo phiếu bàn giao khi cần phê duyệt phân quyền (kiểm quyền)."""
         side_effects = []
         if context.get("held_booking_id"):
             side_effects.append(f"Đã tạm giữ ghế với mã đặt chỗ: {context.get('held_booking_id')}")
@@ -69,7 +57,6 @@ class HandoffManager:
         criteria: FlightCriteria,
         max_steps: int
     ) -> HandoffTicket:
-        """Tạo phiếu bàn giao khi hết ngân sách số bước lặp (Slide 38)."""
         side_effects = []
         if context.get("held_booking_id"):
             side_effects.append(f"Mã đặt chỗ {context.get('held_booking_id')} đang ở trạng thái tạm giữ (chưa thanh toán).")
@@ -91,7 +78,6 @@ class HandoffManager:
         criteria: FlightCriteria,
         details: str
     ) -> HandoffTicket:
-        """Tạo phiếu bàn giao khi phát hiện lặp vô hạn hoặc bế tắc (Slide 39, 40)."""
         return HandoffTicket(
             ticket_id=f"HO-LOOP-{uuid.uuid4().hex[:6].upper()}",
             status="loop_detected" if status_type == "LOOP" else "stalled",

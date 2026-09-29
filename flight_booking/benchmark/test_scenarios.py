@@ -1,8 +1,3 @@
-"""
-Benchmark test scenarios for evaluating AI Agents across the 3 architectures.
-Includes standard, edge cases, failure modes, and permission boundaries.
-"""
-
 from typing import List, Dict, Any
 from flight_booking.models import FlightCriteria
 
@@ -28,7 +23,6 @@ class Scenario:
 
 
 def get_all_scenarios() -> List[Scenario]:
-    """Danh sách các kịch bản kiểm thử đánh giá benchmark."""
     return [
         Scenario(
             scenario_id="SCENARIO_1_STANDARD",

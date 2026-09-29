@@ -1,6 +1,5 @@
 """
-Mock flight booking tools and backend database.
-Conforms to structured output standards (Slide 13, 65) with explicit status, data, and actionable hints.
+Mock flight booking tools.
 """
 
 from typing import Dict, Any, List, Optional
@@ -10,14 +9,13 @@ from flight_booking.models import Flight, BookingRecord, ToolResult
 
 
 class MockFlightDatabase:
-    """Mock in-memory database representing airline inventory and bookings."""
+    """Mock in-memory database."""
     def __init__(self):
         self.flights: Dict[str, Flight] = {}
         self.bookings: Dict[str, BookingRecord] = {}
         self.init_data()
 
     def init_data(self):
-        """Khởi tạo kho dữ liệu chuyến bay mẫu."""
         self.bookings.clear()
         sample_flights = [
             Flight(
@@ -96,23 +94,18 @@ class MockFlightDatabase:
         self.flights = {f.flight_id: f for f in sample_flights}
 
 
-# Singleton database instance for testing
+# Singleton database instance
 _DB = MockFlightDatabase()
 
 
 def get_db() -> MockFlightDatabase:
-    """Truy xuất database mockup."""
     return _DB
 
 
 def reset_db():
-    """Reset dữ liệu database về mặc định trước mỗi bài test."""
     _DB.init_data()
 
 
-# -------------------------------------------------------------
-# Structured Tools for LangChain & LangGraph
-# -------------------------------------------------------------
 
 @tool
 def search_flights(origin: str, destination: str, depart_date: str) -> Dict[str, Any]:
@@ -228,7 +221,6 @@ def book_seat(flight_id: str, seat_number: str, passenger_name: str) -> Dict[str
             data={"available_seats": flight.available_seats}
         ).model_dump()
 
-    # Giữ chỗ: bỏ ghế khỏi danh sách ghế trống
     flight.available_seats.remove(seat_number)
     booking_id = f"BK-{flight_id}-{seat_number}-{uuid.uuid4().hex[:4].upper()}"
 
@@ -297,7 +289,7 @@ def pay(booking_id: str, payment_method: str = "corp_card", amount: Optional[flo
 @tool
 def get_booking(booking_id: str) -> Dict[str, Any]:
     """
-    Tra cứu chi tiết tình trạng đặt chỗ từ hệ thống vé máy bay để kiểm tra chéo (Cross-verification).
+    Tra cứu chi tiết tình trạng đặt chỗ từ hệ thống vé máy bay.
     Tham số:
     - booking_id: Mã đặt chỗ cần tra cứu
     """
@@ -318,5 +310,5 @@ def get_booking(booking_id: str) -> Dict[str, Any]:
     ).model_dump()
 
 
-# Danh sách các tools dùng cho Agent
+# Danh sách các tools
 FLIGHT_TOOLS = [search_flights, check_seat, book_seat, pay, get_booking]

@@ -1,13 +1,3 @@
-"""
-Mẫu thiết kế 3: Mẫu Lai (Hybrid Architecture - ReAct + Plan with Dynamic Replanning).
-Triển khai theo slide 24, 26:
-- Lập kế hoạch các mục tiêu con (Milestones / Todo List).
-- Dùng cơ chế ReAct linh hoạt để thực thi từng mục tiêu con.
-- Sau mỗi quan sát (Observation), đánh giá xem tình huống có thay đổi đáng kể không (chuyến hết vé, giá cao...).
-- Nếu có biến động -> Tự động lập lại kế hoạch (Dynamic Replanning / Reflection) để tìm đường đi mới.
-- Khắc phục nhược điểm 'cứng nhắc' của Plan-then-Execute và 'trôi mục tiêu' của ReAct thuần túy.
-"""
-
 import time
 import json
 from typing import Dict, Any, List, Optional
@@ -27,7 +17,7 @@ class SubGoal(BaseModel):
 
 
 class HybridAgent:
-    """Agent đặt vé máy bay theo Mẫu Lai (Plan + ReAct + Dynamic Replanning)."""
+    """Agent đặt vé máy bay theo Mẫu Lai."""
 
     def __init__(self, harness: AgentHarness):
         self.harness = harness
@@ -35,7 +25,6 @@ class HybridAgent:
         self.planner_llm = get_llm(temperature=0.0)
 
     def _create_initial_plan(self) -> List[SubGoal]:
-        """Tạo danh sách mục tiêu con ban đầu (TodoList)."""
         return [
             SubGoal(id=1, title=f"Tìm kiếm chuyến bay từ {self.harness.criteria.origin} đến {self.harness.criteria.destination} ngày {self.harness.criteria.depart_date}"),
             SubGoal(id=2, title="Kiểm tra chi tiết ghế và giá của chuyến bay tối ưu thỏa mãn ngân sách"),
@@ -44,20 +33,13 @@ class HybridAgent:
         ]
 
     def _replan_if_needed(self, goals: List[SubGoal], last_tool: str, observation: Dict[str, Any]) -> Tuple[List[SubGoal], bool]:
-        """
-        Đánh giá nếu Observation đổi đáng kể (Slide 24):
-        Ví dụ: Chuyến bay bị hết vé (sold_out) hoặc không tìm thấy kết quả.
-        Khi đó cập nhật lại kế hoạch nhiệm vụ.
-        """
         status = observation.get("status") if isinstance(observation, dict) else ""
         if status in ("sold_out", "not_found", "error"):
-            # Biến động môi trường phát sinh -> Replanning
             for g in goals:
                 if g.status == "in_progress":
                     g.status = "failed"
                     g.notes = f"Thất bại tại {last_tool}: {observation.get('message')}"
 
-            # Chèn thêm mục tiêu thay thế
             new_goal = SubGoal(
                 id=len(goals) + 1,
                 title="Tìm kiếm phương án bay dự phòng khác hoặc chuyến bay hãng khác cùng ngày",
@@ -70,7 +52,6 @@ class HybridAgent:
         return goals, False
 
     def run(self, user_query: str) -> AgentRunResult:
-        """Thực thi Mẫu Lai dưới sự điều phối của AgentHarness."""
         self.harness.start_session()
         start_time = time.time()
 
@@ -94,7 +75,6 @@ class HybridAgent:
         handoff_ticket = None
 
         while self.harness.step_count < self.harness.max_steps:
-            # Xác định mục tiêu hiện tại
             active_goal = None
             for g in goals:
                 if g.status == "pending":
@@ -105,11 +85,9 @@ class HybridAgent:
                     active_goal = g
                     break
 
-            # Tạo chỉ dẫn ngữ cảnh mục tiêu
             plan_summary = "\n".join([f"[{g.status.upper()}] Bước {g.id}: {g.title}" for g in goals])
             context_msg = f"TIẾN ĐỘ KẾ HOẠCH HIỆN TẠI:\n{plan_summary}\nMục tiêu hiện tại: {active_goal.title if active_goal else 'Hoàn tất'}"
 
-            # 1. Suy luận ReAct với ngữ cảnh kế hoạch
             self.harness.llm_call_count += 1
             prompt_with_plan = messages + [HumanMessage(content=f"[System Status Update]: {context_msg}")]
 
@@ -129,7 +107,6 @@ class HybridAgent:
                     termination_reason = "STOPPED_WITHOUT_GOAL"
                 break
 
-            # 2. Thực thi tool qua Harness
             should_terminate = False
             for tool_call in ai_msg.tool_calls:
                 t_name = tool_call["name"]
@@ -150,7 +127,6 @@ class HybridAgent:
                     should_terminate = True
                     break
 
-                # 3. Đánh giá Observation đổi đáng kể -> Dynamic Replanning (Slide 24)
                 goals, replanned = self._replan_if_needed(goals, t_name, obs)
                 if not replanned and obs.get("status") == "success":
                     if active_goal:

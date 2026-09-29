@@ -1,12 +1,3 @@
-"""
-Mẫu thiết kế 2: Plan-then-Execute Agent.
-Triển khai theo slide 22-23:
-1. Lập kế hoạch trọn gói trước khi chạy (Planner).
-2. Kế hoạch nhìn thấy được, có thể duyệt trước và ước lượng chi phí.
-3. Thực thi tuần tự từng bước theo kế hoạch cố định (Executor).
-Đặc tính: Giữ vững định hướng tốt, nhưng kém linh hoạt khi gặp lỗi ở các bước trung gian.
-"""
-
 import time
 import json
 import re
@@ -39,7 +30,6 @@ class PlanThenExecuteAgent:
         self.llm = get_llm(temperature=0.0)
 
     def generate_plan(self, user_query: str) -> ExecutionPlan:
-        """Sinh kế hoạch trọn gói ban đầu dưới dạng JSON."""
         system_prompt = (
             "Bạn là Chuyên gia Lập kế hoạch (Planner) cho hệ thống đặt vé máy bay.\n"
             "Hãy phân tích yêu cầu và trả về một kế hoạch JSON các bước thực thi công cụ.\n"
@@ -79,14 +69,12 @@ class PlanThenExecuteAgent:
         ])
         self.harness.llm_call_count += 1
 
-        # Trích xuất JSON từ phản hồi
         text = resp.content.strip()
         json_match = re.search(r"(\{.*\})", text, re.DOTALL)
         if json_match:
             data = json.loads(json_match.group(1))
             return ExecutionPlan(**data)
 
-        # Fallback default deterministic plan nếu LLM sinh text không parse được
         return ExecutionPlan(
             steps=[
                 PlanStep(step_id=1, tool="search_flights", args_template={"origin": self.harness.criteria.origin, "destination": self.harness.criteria.destination, "depart_date": self.harness.criteria.depart_date}, purpose="Tìm chuyến bay"),
@@ -99,11 +87,9 @@ class PlanThenExecuteAgent:
         )
 
     def run(self, user_query: str) -> AgentRunResult:
-        """Thực thi theo kế hoạch đã lập dưới sự kiểm soát của Harness."""
         self.harness.start_session()
         start_time = time.time()
 
-        # Giai đoạn 1: Lập kế hoạch
         try:
             plan = self.generate_plan(user_query)
         except Exception as e:
@@ -118,8 +104,6 @@ class PlanThenExecuteAgent:
                 error_message=f"Lỗi lập kế hoạch: {str(e)}"
             )
 
-        # Giai đoạn 2: Thực thi tuần tự (Executor)
-        # Biến trạng thái lưu trữ các giá trị giải quyết placeholder từ bước trước
         resolved_state: Dict[str, Any] = {
             "origin": self.harness.criteria.origin,
             "destination": self.harness.criteria.destination,
@@ -138,7 +122,6 @@ class PlanThenExecuteAgent:
                 termination_reason = "BUDGET_EXHAUSTED"
                 break
 
-            # Giải quyết placeholder trong args
             args = {}
             for k, v in step.args_template.items():
                 if v == "$FLIGHT_ID":
@@ -152,7 +135,6 @@ class PlanThenExecuteAgent:
                 else:
                     args[k] = v
 
-            # Thực thi bước qua Harness
             obs, term_code, handoff = self.harness.execute_tool_with_harness(step.tool, args)
 
             if term_code:
@@ -160,13 +142,11 @@ class PlanThenExecuteAgent:
                 handoff_ticket = handoff
                 break
 
-            # Kiểm tra kết quả bước để cập nhật trạng thái placeholder
             status = obs.get("status") if isinstance(obs, dict) else None
             data = obs.get("data") if isinstance(obs, dict) else None
 
             if step.tool == "search_flights":
                 if status == "success" and isinstance(data, list) and len(data) > 0:
-                    # Chọn chuyến đầu tiên thỏa ngân sách
                     valid_f = None
                     for f in data:
                         if f.get("price", float("inf")) <= self.harness.criteria.max_price:
@@ -175,11 +155,9 @@ class PlanThenExecuteAgent:
                     if valid_f:
                         resolved_state["flight_id"] = valid_f.get("flight_id")
                     else:
-                        # Tất cả các chuyến đều vượt giá -> Plan-then-Execute bị nghẽn
                         termination_reason = "STEP_FAILED_NO_SUITABLE_FLIGHT"
                         break
                 else:
-                    # Lỗi ở bước đầu làm hỏng toàn bộ (Slide 23)
                     termination_reason = "STEP_FAILED_FLIGHTS_NOT_FOUND"
                     break
 

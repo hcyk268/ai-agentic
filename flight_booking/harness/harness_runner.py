@@ -1,9 +1,3 @@
-"""
-Master Agent Harness Orchestrator.
-Hiện thực hóa chính xác Sơ đồ trục Vòng lặp AI Agent (Slide 10, 11)
-và Checklist 5 điều kiện dừng sau mỗi vòng (Slide 35).
-"""
-
 import time
 from typing import Dict, Any, List, Optional, Tuple, Callable
 from flight_booking.models import FlightCriteria, HandoffTicket, AgentRunResult
@@ -18,13 +12,13 @@ from flight_booking.mock_tools import get_db, FLIGHT_TOOLS
 class AgentHarness:
     """
     Khung Harness bảo vệ và giám sát Agent:
-    - Quản lý dữ liệu bất biến (Data Constraints)
-    - Kiểm quyền thực thi trước mỗi tool call (Step 0)
-    - Kiểm tra tiêu chí hoàn thành bằng code (Step 1)
-    - Phát hiện lặp (Step 2)
-    - Phát hiện bế tắc (Step 3)
-    - Giới hạn ngân sách (Step 4)
-    - Phát sinh phiếu bàn giao chuẩn 30 giây khi cần
+    - Quản lý dữ liệu bất biến
+    - Kiểm quyền thực thi trước mỗi tool call
+    - Kiểm tra tiêu chí hoàn thành
+    - Phát hiện lặp
+    - Phát hiện bế tắc
+    - Giới hạn ngân sách
+    - Phát sinh phiếu bàn giao
     """
 
     def __init__(
@@ -41,7 +35,6 @@ class AgentHarness:
         self.max_steps = max_steps
         self.timeout_sec = timeout_sec
 
-        # Các lớp con của Harness
         self.constraint_mgr = DataConstraintManager(criteria)
         self.completion_verifier = CompletionVerifier(criteria)
         self.permission_mgr = PermissionManager(
@@ -53,7 +46,6 @@ class AgentHarness:
         )
         self.loop_detector = LoopDetector(window=6, repeat_k=2, stall_n=4)
 
-        # Context trạng thái nội bộ của phiên chạy
         self.context: Dict[str, Any] = {
             "flights_found": False,
             "selected_flight": None,
@@ -68,35 +60,29 @@ class AgentHarness:
         self.start_time = 0.0
         self.history_trace: List[Dict[str, Any]] = []
 
-        # Map tools by name
         self.tool_map = {t.name: t for t in FLIGHT_TOOLS}
 
     def start_session(self):
-        """Khởi động phiên chạy mới."""
         self.start_time = time.time()
         self.step_count = 0
         self.llm_call_count = 0
         self.history_trace.clear()
 
     def build_system_context(self) -> str:
-        """
-        Dựng ngữ cảnh đầu vào cho Model (Slide 10, 62).
-        Đưa các ràng buộc bất biến vào vị trí cố định để model không bao giờ quên yêu cầu.
-        """
         return (
             "BẠN LÀ TRỢ LÝ ĐẶT VÉ MÁY BAY CHUYÊN NGHIỆP.\n"
-            "=== RÀNG BUỘC BẮT BUỘC TỪ HỆ THỐNG (DATA CONSTRAINTS) ===\n"
-            f"- Điểm đi (Origin): {self.criteria.origin}\n"
-            f"- Điểm đến (Destination): {self.criteria.destination}\n"
-            f"- Ngày bay (Depart Date): {self.criteria.depart_date}\n"
-            f"- Tên hành khách (Passenger): {self.criteria.passenger_name}\n"
-            f"- Ngân sách tối đa (Max Price): {self.criteria.max_price:,.0f} VNĐ\n"
+            "=== RÀNG BUỘC BẮT BUỘC TỪ HỆ THỐNG ===\n"
+            f"- Điểm đi: {self.criteria.origin}\n"
+            f"- Điểm đến: {self.criteria.destination}\n"
+            f"- Ngày bay: {self.criteria.depart_date}\n"
+            f"- Tên hành khách: {self.criteria.passenger_name}\n"
+            f"- Ngân sách tối đa: {self.criteria.max_price:,.0f} VNĐ\n"
             f"- Khung giờ ưu tiên: {self.criteria.preferred_time}\n"
             "==========================================================\n"
             "QUY TẮC AN TOÀN VÀ VẬN HÀNH:\n"
             "1. Chỉ dùng các tool được cung cấp để tra cứu và đặt vé. Tuyệt đối không bịa đặt mã chuyến bay hoặc giá.\n"
             "2. Khi nhận kết quả từ tool dạng JSON, đọc kỹ trường status và dữ liệu.\n"
-            "3. Quy trình chuẩn: Tìm chuyến bay -> Kiểm tra ghế và giá -> Giữ chỗ (book_seat) -> Thanh toán (pay).\n"
+            "3. Quy trình chuẩn: Tìm chuyến bay -> Kiểm tra ghế và giá -> Giữ chỗ -> Thanh toán.\n"
             "4. Tuyệt đối không chọn vé vượt ngân sách tối đa hoặc sai ngày/tuyến đường.\n"
         )
 
@@ -107,16 +93,16 @@ class AgentHarness:
     ) -> Tuple[Dict[str, Any], Optional[str], Optional[HandoffTicket]]:
         """
         Thực thi tool qua chu trình kiểm duyệt của Harness:
-        - Checklist #0: Kiểm quyền trước khi gọi.
-        - Checklist #1 -> #4: Kiểm tra điều kiện dừng sau khi có observation.
+        - #0: Kiểm quyền trước khi gọi.
+        - #1 -> #4: Kiểm tra điều kiện dừng sau khi có observation.
         Trả về: (observation_dict, termination_reason, handoff_ticket)
         """
         self.step_count += 1
         current_step = self.step_count
 
-        # -------------------------------------------------------------
-        # CHECKLIST #0: TRƯỚC KHI THỰC THI TOOL -> KIỂM QUYỀN
-        # -------------------------------------------------------------
+        # ---------------
+        # #0: KIỂM QUYỀN
+        # ---------------
         allowed, approval_req = self.permission_mgr.check_tool_permission(
             tool_name=tool_name,
             args=tool_args,
@@ -124,7 +110,6 @@ class AgentHarness:
         )
 
         if not allowed and approval_req:
-            # Tạo phiếu bàn giao phê duyệt (Slide 41)
             handoff = HandoffManager.create_permission_handoff(
                 criteria=self.criteria,
                 action=approval_req.action,
@@ -135,9 +120,6 @@ class AgentHarness:
             self._log_trace(current_step, tool_name, tool_args, {"error": "Cần phê duyệt quyền"}, "NEEDS_APPROVAL")
             return {"status": "pending_approval", "message": approval_req.reason}, "NEEDS_APPROVAL", handoff
 
-        # -------------------------------------------------------------
-        # THỰC THI TOOL
-        # -------------------------------------------------------------
         target_tool = self.tool_map.get(tool_name)
         if not target_tool:
             obs = {"status": "error", "message": f"Công cụ '{tool_name}' không tồn tại trong danh mục."}
@@ -149,41 +131,39 @@ class AgentHarness:
                 obs = {"status": "error", "message": f"Lỗi thực thi công cụ: {str(e)}"}
                 self.context["failed_attempts"].append(f"Tool {tool_name} gặp lỗi ngoại lệ: {str(e)}")
 
-        # Cập nhật context dựa trên kết quả tool
         self._update_internal_context(tool_name, tool_args, obs)
 
-        # Tính đại lượng tiến triển (progress metric)
         progress = self.constraint_mgr.calculate_progress_metric(self.context)
 
-        # -------------------------------------------------------------
-        # CHECKLIST #1: SAU KHI CÓ OBSERVATION -> TIÊU CHÍ HOÀN THÀNH
-        # -------------------------------------------------------------
+        # -------------------------
+        # #1: TIÊU CHÍ HOÀN THÀNH
+        # -------------------------
         booking_id = self.context.get("held_booking_id")
         verified, msg, details = self.completion_verifier.verify_booking(booking_id)
         if verified:
             self._log_trace(current_step, tool_name, tool_args, obs, "GOAL_ACHIEVED")
             return obs, "GOAL_ACHIEVED", None
 
-        # -------------------------------------------------------------
-        # CHECKLIST #2: SAU KHI CÓ OBSERVATION -> PHÁT HIỆN LẶP
-        # -------------------------------------------------------------
+        # -------------------
+        # #2: PHÁT HIỆN LẶP
+        # -------------------
         loop_status = self.loop_detector.check(tool_name, tool_args, progress)
         if loop_status == "LOOP":
             handoff = HandoffManager.create_loop_or_stall_handoff("LOOP", self.context, self.criteria, f"Gọi trùng lặp {tool_name}")
             self._log_trace(current_step, tool_name, tool_args, obs, "LOOP_DETECTED")
             return obs, "LOOP_DETECTED", handoff
 
-        # -------------------------------------------------------------
-        # CHECKLIST #3: SAU KHI CÓ OBSERVATION -> PHÁT HIỆN BẾ TẮC
-        # -------------------------------------------------------------
+        # ----------------------
+        # #3: PHÁT HIỆN BẾ TẮC
+        # ----------------------
         if loop_status == "STALL":
             handoff = HandoffManager.create_loop_or_stall_handoff("STALL", self.context, self.criteria, "Không có tiến triển qua nhiều vòng")
             self._log_trace(current_step, tool_name, tool_args, obs, "STALL_DETECTED")
             return obs, "STALL_DETECTED", handoff
 
-        # -------------------------------------------------------------
-        # CHECKLIST #4: SAU KHI CÓ OBSERVATION -> HẾT NGÂN SÁCH (CỨNG)
-        # -------------------------------------------------------------
+        # ---------------
+        # #4: NGÂN SÁCH
+        # ---------------
         elapsed = time.time() - self.start_time
         if self.step_count >= self.max_steps or elapsed >= self.timeout_sec:
             handoff = HandoffManager.create_budget_exhausted_handoff(self.context, self.criteria, self.max_steps)
@@ -195,7 +175,6 @@ class AgentHarness:
         return obs, None, None
 
     def _update_internal_context(self, tool_name: str, args: Dict[str, Any], obs: Dict[str, Any]):
-        """Cập nhật trạng thái tiến trình từ kết quả thực tế."""
         status = obs.get("status") if isinstance(obs, dict) else None
 
         if tool_name == "search_flights":
@@ -225,7 +204,6 @@ class AgentHarness:
                 self.context["failed_attempts"].append(f"Thanh toán {args}: {obs.get('message')}")
 
     def _log_trace(self, step: int, tool: str, args: Dict[str, Any], obs: Any, status: str):
-        """Ghi nhận vết thực thi (Trace log) theo Slide 20, 51."""
         self.history_trace.append({
             "step": step,
             "tool": tool,
@@ -236,6 +214,5 @@ class AgentHarness:
         })
 
     def final_verification(self) -> Tuple[bool, str]:
-        """Kiểm chứng độc lập lần cuối trước khi trả kết quả."""
         booking_id = self.context.get("held_booking_id")
         return self.completion_verifier.verify_booking(booking_id)[:2]

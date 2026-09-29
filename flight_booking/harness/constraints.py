@@ -1,21 +1,13 @@
-"""
-Harness Layer 1: Ràng buộc là dữ liệu (Data Constraints).
-Slide 60-62: Giữ yêu cầu ở một chỗ cố định, dùng Pydantic model kiểm tra tính toàn vẹn,
-ngăn ngừa hoàn toàn hiện tượng Quên yêu cầu (Goal Drift).
-"""
-
 from typing import Dict, Any, Tuple
 from flight_booking.models import FlightCriteria, Flight, BookingRecord
 
 
 class DataConstraintManager:
-    """Quản lý và thẩm định các ràng buộc dữ liệu bất biến của tác vụ."""
-
     def __init__(self, criteria: FlightCriteria):
         self.criteria = criteria
 
     def validate_flight_against_criteria(self, flight: Flight) -> Tuple[bool, str]:
-        """Kiểm tra chuyến bay có thỏa mãn các ràng buộc cứng không."""
+        """Kiểm tra chuyến bay thỏa mãn các ràng buộc."""
         if flight.origin.upper() != self.criteria.origin.upper():
             return False, f"Sai điểm đi: yêu cầu {self.criteria.origin}, thực tế {flight.origin}"
 
@@ -41,8 +33,7 @@ class DataConstraintManager:
 
     def calculate_progress_metric(self, context: Dict[str, Any]) -> int:
         """
-        Tính toán đại lượng tiến triển (progress metric) khách quan để cấp cho LoopDetector (Slide 40, 46).
-        Thang điểm tăng dần từ 0 -> 4:
+        Tính toán đại lượng tiến triển (progress metric) khách quan cho LoopDetector.
         0: Chưa tìm kiếm chuyến bay
         1: Đã tìm kiếm và có danh sách chuyến bay
         2: Đã kiểm tra chi tiết ghế trống cho chuyến phù hợp

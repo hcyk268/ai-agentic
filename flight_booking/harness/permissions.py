@@ -1,27 +1,16 @@
-"""
-Harness Layer 3: Kiểm quyền (Permission & Authorization Gateway).
-Slide 35, 41: Chạy TRƯỚC KHI THỰC THI TOOL.
-Ngăn chặn các hành động nhạy cảm hoặc vượt thẩm quyền:
-- Thanh toán tài chính (pay)
-- Đặt vé không hoàn hủy (non-refundable ticket)
-- Đặt vé vượt ngưỡng chi tiêu cho phép mà chưa có người duyệt
-"""
-
 from typing import Dict, Any, Tuple, Optional
 from flight_booking.models import ApprovalRequest, FlightCriteria
 from flight_booking.mock_tools import get_db
 
 
 class PermissionManager:
-    """Quản lý thẩm quyền và cổng phê duyệt cho Agent."""
-
     def __init__(
         self,
         criteria: FlightCriteria,
         require_approval_for_pay: bool = True,
         require_approval_for_non_refundable: bool = True,
         approval_price_threshold: float = 1500000.0,
-        auto_approve: bool = False  # Dùng khi chạy benchmark tự động có giả lập phê duyệt
+        auto_approve: bool = False
     ):
         self.criteria = criteria
         self.require_approval_for_pay = require_approval_for_pay
@@ -35,19 +24,14 @@ class PermissionManager:
         args: Dict[str, Any],
         context: Dict[str, Any]
     ) -> Tuple[bool, Optional[ApprovalRequest]]:
-        """
-        Kiểm tra quyền thực thi trước khi gọi tool.
-        Trả về: (được phép thực thi, yêu cầu phê duyệt nếu bị chặn)
-        """
+
         db = get_db()
 
-        # 1. Kiểm tra quyền khi đặt ghế (book_seat)
         if tool_name == "book_seat":
             flight_id = args.get("flight_id", "").strip().upper()
             flight = db.flights.get(flight_id)
 
             if flight:
-                # Kiểm tra vé không hoàn hủy và vượt ngưỡng giá
                 is_non_refundable = not flight.refundable
                 exceeds_threshold = flight.price > self.approval_price_threshold
 
@@ -69,12 +53,9 @@ class PermissionManager:
                         return False, req
 
                 if exceeds_threshold:
-                    # Nếu vượt ngân sách tối đa của người dùng thì từ chối ngay lập tức
                     if flight.price > self.criteria.max_price:
-                        # Ràng buộc cứng: không cho phép vượt max_price
                         pass
 
-        # 2. Kiểm tra quyền khi thanh toán (pay)
         if tool_name == "pay":
             booking_id = args.get("booking_id", "").strip()
             booking = db.bookings.get(booking_id)

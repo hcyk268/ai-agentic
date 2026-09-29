@@ -1,9 +1,3 @@
-"""
-Benchmark Evaluator: Chạy thử nghiệm và so sánh định lượng 3 mẫu thiết kế Agent.
-Thu thập các chỉ số: Tỷ lệ thành công, Số bước lặp, Số lần gọi LLM, Thời gian chạy,
-Khả năng thích ứng biến động, và Số lần Harness can thiệp an toàn.
-"""
-
 import time
 from typing import List, Dict, Any, Optional
 from flight_booking.models import AgentRunResult
@@ -16,19 +10,16 @@ from flight_booking.benchmark.test_scenarios import Scenario, get_all_scenarios
 
 
 class BenchmarkEvaluator:
-    """Điều phối viên đánh giá benchmark hiệu năng của các mẫu thiết kế Agent."""
-
     def __init__(self, scenarios: Optional[List[Scenario]] = None):
         self.scenarios = scenarios or get_all_scenarios()
         self.results: List[AgentRunResult] = []
 
     def run_all(self, selected_agents: Optional[List[str]] = None) -> List[AgentRunResult]:
-        """Thực thi toàn bộ kịch bản cho từng mẫu agent."""
         agent_names = selected_agents or ["ReActAgent", "PlanThenExecuteAgent", "HybridAgent"]
         self.results.clear()
 
         print("=" * 80)
-        print("BẮT ĐẦU CHƯƠNG TRÌNH ĐÁNH GIÁ BENCHMARK 3 MẪU THIẾT KẾ AGENT")
+        print("BẮT ĐẦU ĐÁNH GIÁ BENCHMARK 3 MẪU THIẾT KẾ AGENT")
         print("=" * 80)
 
         for sc in self.scenarios:
@@ -36,9 +27,8 @@ class BenchmarkEvaluator:
             print(f"    Mục tiêu: {sc.description}")
 
             for a_name in agent_names:
-                reset_db()  # Đảm bảo môi trường sạch trước mỗi lượt chạy
+                reset_db()
 
-                # Khởi tạo Harness với cấu hình của kịch bản
                 settings = sc.harness_settings.copy()
                 harness = AgentHarness(
                     criteria=sc.criteria,
@@ -49,7 +39,6 @@ class BenchmarkEvaluator:
                     auto_approve=settings.get("auto_approve", True)
                 )
 
-                # Khởi tạo Agent tương ứng
                 if a_name == "ReActAgent":
                     agent = ReActAgent(harness)
                 elif a_name == "PlanThenExecuteAgent":
@@ -69,11 +58,9 @@ class BenchmarkEvaluator:
         return self.results
 
     def generate_summary_report(self) -> str:
-        """Tổng hợp kết quả benchmark thành báo cáo Markdown chi tiết."""
         if not self.results:
             return "Chưa có kết quả benchmark nào."
 
-        # Thống kê theo Agent Type
         stats: Dict[str, Dict[str, Any]] = {}
         for r in self.results:
             if r.agent_name not in stats:
@@ -106,19 +93,15 @@ class BenchmarkEvaluator:
         plan = stats.get("PlanThenExecuteAgent", {})
         hybrid = stats.get("HybridAgent", {})
 
-        # Tỷ lệ thành công
         r_sr = f"{(react.get('success', 0)/react.get('total', 1)*100):.1f}%" if react else "N/A"
         p_sr = f"{(plan.get('success', 0)/plan.get('total', 1)*100):.1f}%" if plan else "N/A"
         h_sr = f"{(hybrid.get('success', 0)/hybrid.get('total', 1)*100):.1f}%" if hybrid else "N/A"
         md.append(f"| **Tỷ lệ thành công (Code verified)** | **{r_sr}** | {p_sr} | **{h_sr}** |")
 
-        # Trung bình số bước công cụ
         md.append(f"| **Số bước gọi Tool (Avg Steps)** | {avg(react.get('steps', []))} | {avg(plan.get('steps', []))} | {avg(hybrid.get('steps', []))} |")
 
-        # Trung bình số lần gọi LLM
         md.append(f"| **Số lần gọi LLM (Avg LLM calls)** | {avg(react.get('llm_calls', []))} | {avg(plan.get('llm_calls', []))} | {avg(hybrid.get('llm_calls', []))} |")
 
-        # Thời gian thực thi trung bình
         md.append(f"| **Thời gian trung bình (Giây)** | {avg(react.get('durations', []))}s | {avg(plan.get('durations', []))}s | {avg(hybrid.get('durations', []))}s |")
 
         md.append("\n### BẢNG CHI TIẾT THEO TỪNG KỊCH BẢN\n")

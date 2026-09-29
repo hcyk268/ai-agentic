@@ -1,6 +1,5 @@
 """
-Data models and schemas for the Flight Booking AI Agent system.
-Adheres to strict schema validation (Sensor computational & Data Constraints).
+Data models and schemas.
 """
 
 from typing import List, Optional, Dict, Any, Literal
@@ -9,10 +8,6 @@ from datetime import datetime
 
 
 class FlightCriteria(BaseModel):
-    """
-    Ràng buộc là dữ liệu (Data Constraint):
-    Yêu cầu đầu vào và các tiêu chí cố định không bị trôi (Goal Drift) trong quá trình suy luận.
-    """
     origin: str = Field(..., description="Mã sân bay đi (VD: SGN, HAN, DAD)")
     destination: str = Field(..., description="Mã sân bay đến (VD: SGN, HAN, DAD)")
     depart_date: str = Field(..., description="Ngày bay theo định dạng YYYY-MM-DD")
@@ -25,7 +20,6 @@ class FlightCriteria(BaseModel):
 
 
 class Flight(BaseModel):
-    """Mô hình dữ liệu chuyến bay."""
     flight_id: str
     airline: str
     origin: str
@@ -39,7 +33,6 @@ class Flight(BaseModel):
 
 
 class BookingRecord(BaseModel):
-    """Mô hình dữ liệu hồ sơ đặt vé trong cơ sở dữ liệu backend."""
     booking_id: str
     flight_id: str
     passenger_name: str
@@ -52,7 +45,6 @@ class BookingRecord(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
-    """Yêu cầu phê duyệt quyền (Human-in-the-loop permission gate)."""
     action: str
     params: Dict[str, Any]
     reason: str
@@ -61,10 +53,6 @@ class ApprovalRequest(BaseModel):
 
 
 class HandoffTicket(BaseModel):
-    """
-    Lớp Harness: Bàn giao cho con người (Slide 48).
-    'Bàn giao tốt là bàn giao mà người nhận trả lời được trong 30 giây.'
-    """
     ticket_id: str
     status: Literal["stalled", "budget_exhausted", "loop_detected", "needs_approval", "error"]
     summary: str = Field(..., description="Tóm tắt ngắn gọn tình trạng")
@@ -75,10 +63,6 @@ class HandoffTicket(BaseModel):
 
 
 class ToolResult(BaseModel):
-    """
-    Chuẩn hóa Structured Output của Tool (Slide 13, 65).
-    Đảm bảo agent nhận thông điệp rõ ràng, có gợi ý (hint) khi gặp lỗi.
-    """
     status: Literal["success", "not_found", "sold_out", "error", "pending_approval"]
     message: str
     data: Optional[Any] = None
@@ -86,7 +70,6 @@ class ToolResult(BaseModel):
 
 
 class AgentRunResult(BaseModel):
-    """Kết quả chạy của Agent dùng để đánh giá Benchmark."""
     agent_name: str
     scenario_id: str
     success: bool
